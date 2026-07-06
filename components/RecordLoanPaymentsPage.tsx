@@ -8,6 +8,16 @@ import { ArrowLeft, Loader2, ExternalLink, Trash2 } from 'lucide-react';
 import type { LoanRecipient } from '../types/studyLoan';
 import { STUDY_LOAN_BUCKET } from '../types/studyLoan';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { validateUploadFile } from '../lib/fileValidation';
+
+const MAX_PAYMENT_AMOUNT = 1_000_000;
+const MIN_PAYMENT_DATE = '2000-01-01';
+
+/** Today's date in the user's local timezone, formatted YYYY-MM-DD. */
+function todayLocalISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 interface RecordLoanPaymentsPageProps {
   recipient: LoanRecipient;
@@ -43,6 +53,7 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
   const [paymentDate, setPaymentDate] = useState('');
   const [amountInput, setAmountInput] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     setCurrentRecipient(recipient);
@@ -51,13 +62,16 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
   const loadPayments = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       if (isSupabaseConfigured() && supabase) {
         const { data, error } = await supabase
           .from('study_loan_payments')
           .select('*')
           .eq('recipient_id', recipient.id)
           .order('paid_at', { ascending: false });
-        if (!error && data) {
+        if (error) {
+          setLoadError(error.message || 'Failed to load payment history.');
+        } else if (data) {
           const rows = (data as any[]).map((p) => ({
             id: p.id,
             amount: p.amount,
@@ -170,15 +184,44 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
   };
 
   const handleSavePayment = async () => {
-    const amount = parseInt(amountInput, 10);
     if (!paymentDate.trim()) {
       alert('Select the payment date (when the student paid).');
       return;
     }
-    if (Number.isNaN(amount) || amount <= 0) {
-      alert('Enter a valid payment amount.');
+    if (paymentDate > todayLocalISO()) {
+      alert('Payment date cannot be in the future.');
       return;
     }
+    if (paymentDate < MIN_PAYMENT_DATE) {
+      alert(`Payment date cannot be earlier than ${MIN_PAYMENT_DATE}.`);
+      return;
+    }
+    const amount = Number(amountInput.trim());
+    if (!amountInput.trim() || !Number.isInteger(amount) || amount <= 0) {
+      alert('Enter a valid payment amount in whole Ringgit (e.g. 200).');
+      return;
+    }
+    if (amount > MAX_PAYMENT_AMOUNT) {
+      alert(`Payment amount cannot exceed RM ${MAX_PAYMENT_AMOUNT.toLocaleString()}.`);
+      return;
+    }
+    if (receiptFile) {
+      const fileError = validateUploadFile(receiptFile, 'Receipt');
+      if (fileError) {
+        alert(fileError);
+        return;
+      }
+    }
+    const remainingNow = Math.max(0, currentRecipient.loan_amount - currentRecipient.total_paid);
+    if (
+      amount > remainingNow &&
+      !window.confirm(
+        `This payment (RM ${amount.toLocaleString()}) is more than the remaining balance (RM ${remainingNow.toLocaleString()}). Record it anyway?`,
+      )
+    ) {
+      return;
+    }
+    let paymentSaved = false;
     try {
       setSaving(true);
       let receiptPath: string | null = null;
@@ -200,11 +243,17 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
           payment_month: null,
           receipt_path: receiptPath,
         });
-        if (payError) throw payError;
+        if (payError) {
+          // Don't leave an orphaned receipt in storage when the row insert failed.
+          if (receiptPath) {
+            await supabase.storage.from(STUDY_LOAN_BUCKET).remove([receiptPath]);
+          }
+          throw payError;
+        }
       } else {
         const paymentsLocal = JSON.parse(localStorage.getItem('myHainanLoanPayments') || '[]');
         paymentsLocal.push({
-          id: Date.now().toString(),
+          id: crypto.randomUUID(),
           recipientId: recipient.id,
           amount,
           paymentDate,
@@ -213,13 +262,20 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
         });
         localStorage.setItem('myHainanLoanPayments', JSON.stringify(paymentsLocal));
       }
-      await syncRecipientTotals();
+      paymentSaved = true;
       setPaymentDate('');
       setAmountInput('');
       setReceiptFile(null);
+      await syncRecipientTotals();
       await loadPayments();
     } catch (e: any) {
-      alert(e?.message || 'Failed to record payment.');
+      if (paymentSaved) {
+        alert(
+          `Payment was saved, but totals could not be refreshed: ${e?.message || 'Unknown error'}. Reload the page to see updated numbers.`,
+        );
+      } else {
+        alert(e?.message || 'Failed to record payment.');
+      }
     } finally {
       setSaving(false);
     }
@@ -233,6 +289,7 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
       return;
     }
 
+    let paymentDeleted = false;
     try {
       setDeletingPaymentId(payment.id);
       if (isSupabaseConfigured() && supabase) {
@@ -246,13 +303,20 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
         const filtered = raw.filter((p: any) => p.id !== payment.id);
         localStorage.setItem('myHainanLoanPayments', JSON.stringify(filtered));
       }
+      paymentDeleted = true;
 
-      await syncRecipientTotals();
-      await loadPayments();
       setPendingDeletePayment(null);
       setDeleteConfirmText('');
+      await syncRecipientTotals();
+      await loadPayments();
     } catch (e: any) {
-      alert(e?.message || 'Failed to delete payment.');
+      if (paymentDeleted) {
+        alert(
+          `Payment was deleted, but totals could not be refreshed: ${e?.message || 'Unknown error'}. Reload the page to see updated numbers.`,
+        );
+      } else {
+        alert(e?.message || 'Failed to delete payment.');
+      }
     } finally {
       setDeletingPaymentId(null);
     }
@@ -316,7 +380,7 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-gray-600">
                 <span>Overall progress</span>
-                <span>{Math.round(progressPct)}%</span>
+                <span>{Math.round(Math.min(100, progressPct))}%</span>
               </div>
               <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div
@@ -339,13 +403,20 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Payment date *</Label>
-                <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+                <Input
+                  type="date"
+                  min={MIN_PAYMENT_DATE}
+                  max={todayLocalISO()}
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Amount (RM) *</Label>
                 <Input
                   type="number"
                   min="1"
+                  step="1"
                   value={amountInput}
                   onChange={(e) => setAmountInput(e.target.value)}
                   placeholder="e.g. 200"
@@ -356,10 +427,22 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
                 <div className="border-2 border-dashed border-gray-300 rounded-lg px-3 py-2 text-center">
                   <input
                     type="file"
-                    accept="image/*,.pdf"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp"
                     id="new-payment-receipt"
                     className="hidden"
-                    onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      if (file) {
+                        const fileError = validateUploadFile(file, 'Receipt');
+                        if (fileError) {
+                          alert(fileError);
+                          e.target.value = '';
+                          setReceiptFile(null);
+                          return;
+                        }
+                      }
+                      setReceiptFile(file);
+                    }}
                   />
                   <label htmlFor="new-payment-receipt" className="cursor-pointer text-xs text-gray-600">
                     {receiptFile ? receiptFile.name : 'Upload (optional)'}
@@ -391,6 +474,13 @@ export function RecordLoanPaymentsPage({ recipient, onBack, onTotalsUpdated }: R
               <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Loading payments...
+              </div>
+            ) : loadError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 space-y-2">
+                <p>Could not load payment history: {loadError}</p>
+                <Button type="button" size="sm" variant="outline" onClick={loadPayments}>
+                  Retry
+                </Button>
               </div>
             ) : payments.length === 0 ? (
               <p className="text-gray-500 text-sm">No payments recorded yet.</p>

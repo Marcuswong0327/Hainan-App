@@ -10,7 +10,10 @@ import type { GuarantorInsert, LoanRecipientCore } from '../types/studyLoan';
 import { STUDY_LOAN_BUCKET } from '../types/studyLoan';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { formatMalaysiaMobileDash, isValidMalaysiaMobileDash } from '../lib/malaysiaPhone';
+import { validateUploadFile } from '../lib/fileValidation';
 import { AssociationSelect } from './AssociationSelect';
+
+const MAX_TOTAL_LOAN = 1_000_000;
 
 const LOAN_TYPES = [
   { value: 'degree_3000', label: 'Degree (学士)', amount: 3000 },
@@ -71,12 +74,6 @@ export function AddLoanRecipientPage({ onBack, onSubmit }: AddLoanRecipientPageP
   const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
   const isValidPhone = (value: string) => isValidMalaysiaMobileDash(value);
 
-  const isAllowedScreenshotFile = (f: File | null) => {
-    if (!f) return false;
-    const n = f.name.toLowerCase();
-    return n.endsWith('.pdf') || n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg');
-  };
-
   const sanitizeYear = (raw: string) => raw.replace(/\D/g, '').slice(0, 4);
 
   /** Admission / graduation stored as 4-digit year strings (e.g. "2024"). */
@@ -91,15 +88,8 @@ export function AddLoanRecipientPage({ onBack, onSubmit }: AddLoanRecipientPageP
     return true;
   };
 
-  const handleSubmit = async () => {
-    const studyYears =
-      form.admission_date && form.expected_graduation_date
-        ? Math.max(1, parseInt(form.expected_graduation_date, 10) - parseInt(form.admission_date, 10))
-        : 1;
-    const manualTotalLoan = form.total_loan.trim() === '' ? NaN : parseInt(form.total_loan, 10);
-    const amount = Number.isNaN(manualTotalLoan) ? annualLoanAmount * studyYears : Math.max(0, manualTotalLoan);
-    const paidAmount = Math.max(0, parseInt(form.loan_amount || '0', 10) || 0);
-    const ageNum = form.age ? parseInt(form.age, 10) : NaN;
+  /** Validate everything entered on step 1; returns an error message or null. */
+  const validateStep1 = (): string | null => {
     const missingMainFields: string[] = [];
     if (!form.association) missingMainFields.push('Association');
     if (!form.full_name.trim()) missingMainFields.push('Full name (English)');
@@ -108,13 +98,59 @@ export function AddLoanRecipientPage({ onBack, onSubmit }: AddLoanRecipientPageP
     if (!form.courses.trim()) missingMainFields.push('Courses');
     if (!form.loan_type) missingMainFields.push('Loan type');
     if (missingMainFields.length > 0) {
-      alert(`Please fill in these required fields:\n- ${missingMainFields.join('\n- ')}`);
-      return;
+      return `Please fill in these required fields:\n- ${missingMainFields.join('\n- ')}`;
     }
     if (annualLoanAmount <= 0) {
-      alert('Invalid loan type selected. Please reselect loan type.');
+      return 'Invalid loan type selected. Please reselect loan type.';
+    }
+    const ageNum = form.age ? parseInt(form.age, 10) : NaN;
+    if (form.age && (Number.isNaN(ageNum) || ageNum < 17 || ageNum > 65)) {
+      return 'Please enter a valid age between 17 and 65.';
+    }
+    if (form.email.trim() && !isValidEmail(form.email)) {
+      return 'Please enter a valid email address.';
+    }
+    if (!isValidPhone(form.phone_number)) {
+      return 'Phone must be a Malaysian mobile: 01X-XXXXXXX or longer (11–12 digits), e.g. 011-12345678.';
+    }
+    if ((form.admission_date || form.expected_graduation_date) && (!form.admission_date || !form.expected_graduation_date)) {
+      return 'Please enter both admission year and expected graduation year, or leave both empty.';
+    }
+    if (form.admission_date && form.expected_graduation_date && !areYearsValid(form.admission_date, form.expected_graduation_date)) {
+      return 'Admission year must be before graduation year; course length between 1 and 8 years (years only).';
+    }
+    if (form.total_loan.trim() !== '') {
+      const n = Number(form.total_loan.trim());
+      if (!Number.isInteger(n) || n <= 0) {
+        return 'Total loan must be a positive whole number (RM), or leave it empty to auto-calculate.';
+      }
+      if (n > MAX_TOTAL_LOAN) {
+        return `Total loan cannot exceed RM ${MAX_TOTAL_LOAN.toLocaleString()}.`;
+      }
+    }
+    if (form.loan_amount.trim() !== '') {
+      const n = Number(form.loan_amount.trim());
+      if (!Number.isInteger(n) || n < 0) {
+        return 'Paid amount must be zero or a positive whole number (RM).';
+      }
+    }
+    return null;
+  };
+
+  const handleSubmit = async () => {
+    const step1Error = validateStep1();
+    if (step1Error) {
+      alert(step1Error);
+      setStep(1);
       return;
     }
+    const studyYears =
+      form.admission_date && form.expected_graduation_date
+        ? Math.max(1, parseInt(form.expected_graduation_date, 10) - parseInt(form.admission_date, 10))
+        : 1;
+    const manualTotalLoan = form.total_loan.trim() === '' ? NaN : Number(form.total_loan.trim());
+    const amount = Number.isNaN(manualTotalLoan) ? annualLoanAmount * studyYears : manualTotalLoan;
+    const paidAmount = form.loan_amount.trim() === '' ? 0 : Number(form.loan_amount.trim());
     const missingGuarantorFields: string[] = [];
     if (!form.g1_name_zh.trim()) missingGuarantorFields.push('担保人（一）姓名（中文）');
     if (!form.g1_name_en.trim()) missingGuarantorFields.push('担保人（一）姓名（英文）');
@@ -136,28 +172,25 @@ export function AddLoanRecipientPage({ onBack, onSubmit }: AddLoanRecipientPageP
       alert('担保人（二）年龄须为 1–65 岁。');
       return;
     }
-    if (documentScreenshotFile && !isAllowedScreenshotFile(documentScreenshotFile)) {
-      alert('文件截图仅支持 PNG、PDF 或 JPG。');
-      return;
+    const fileChecks: Array<[File | null, string]> = [
+      [offerLetterFile, 'Offer letter'],
+      [studentIcFile, 'Student IC document'],
+      [documentScreenshotFile, '文件截图'],
+    ];
+    for (const [file, label] of fileChecks) {
+      if (!file) continue;
+      const fileError = validateUploadFile(file, label);
+      if (fileError) {
+        alert(fileError);
+        return;
+      }
     }
-    if (form.age && (Number.isNaN(ageNum) || ageNum < 17 || ageNum > 65)) {
-      alert('Please enter a valid age between 17 and 65.');
-      return;
-    }
-    if (form.email.trim() && !isValidEmail(form.email)) {
-      alert('Please enter a valid email address.');
-      return;
-    }
-    if (!isValidPhone(form.phone_number)) {
-      alert('Phone must be a Malaysian mobile: 01X-XXXXXXX or longer (11–12 digits), e.g. 011-12345678.');
-      return;
-    }
-    if ((form.admission_date || form.expected_graduation_date) && (!form.admission_date || !form.expected_graduation_date)) {
-      alert('Please enter both admission year and expected graduation year, or leave both empty.');
-      return;
-    }
-    if (form.admission_date && form.expected_graduation_date && !areYearsValid(form.admission_date, form.expected_graduation_date)) {
-      alert('Admission year must be before graduation year; course length between 1 and 8 years (years only).');
+    if (
+      paidAmount > amount &&
+      !window.confirm(
+        `Paid amount (RM ${paidAmount.toLocaleString()}) is more than the total loan (RM ${amount.toLocaleString()}). The loan will be marked as completed. Continue?`,
+      )
+    ) {
       return;
     }
     setSubmitting(true);
@@ -368,8 +401,18 @@ export function AddLoanRecipientPage({ onBack, onSubmit }: AddLoanRecipientPageP
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
                     <input
                       type="file"
-                      accept=".pdf,image/*"
-                      onChange={(e) => setOfferLetterFile(e.target.files?.[0] || null)}
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        const err = file ? validateUploadFile(file, 'Offer letter') : null;
+                        if (err) {
+                          alert(err);
+                          e.target.value = '';
+                          setOfferLetterFile(null);
+                          return;
+                        }
+                        setOfferLetterFile(file);
+                      }}
                       className="hidden"
                       id="offerLetter"
                     />
@@ -387,10 +430,20 @@ export function AddLoanRecipientPage({ onBack, onSubmit }: AddLoanRecipientPageP
                   <div className="border-2 border-dashed border-gray-300 rounded-lg px-3 py-2 text-center">
                     <input
                       type="file"
-                      accept="image/*,.pdf"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
                       className="hidden"
                       id="studentIcFile"
-                      onChange={(e) => setStudentIcFile(e.target.files?.[0] || null)}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        const err = file ? validateUploadFile(file, 'Student IC document') : null;
+                        if (err) {
+                          alert(err);
+                          e.target.value = '';
+                          setStudentIcFile(null);
+                          return;
+                        }
+                        setStudentIcFile(file);
+                      }}
                     />
                     <label htmlFor="studentIcFile" className="cursor-pointer text-sm text-gray-600">
                       {studentIcFile ? studentIcFile.name : 'Upload document'}
@@ -474,10 +527,20 @@ export function AddLoanRecipientPage({ onBack, onSubmit }: AddLoanRecipientPageP
                   <div className="border-2 border-dashed border-gray-300 rounded-lg px-3 py-4 text-center">
                     <input
                       type="file"
-                      accept=".png,.pdf,.jpg,.jpeg,image/png,image/jpeg,application/pdf"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
                       className="hidden"
                       id="doc-screenshot"
-                      onChange={(e) => setDocumentScreenshotFile(e.target.files?.[0] || null)}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        const err = file ? validateUploadFile(file, '文件截图') : null;
+                        if (err) {
+                          alert(err);
+                          e.target.value = '';
+                          setDocumentScreenshotFile(null);
+                          return;
+                        }
+                        setDocumentScreenshotFile(file);
+                      }}
                     />
                     <label htmlFor="doc-screenshot" className="cursor-pointer text-sm text-gray-700">
                       {documentScreenshotFile ? documentScreenshotFile.name : '上传 PNG、PDF 或 JPG'}
@@ -497,7 +560,20 @@ export function AddLoanRecipientPage({ onBack, onSubmit }: AddLoanRecipientPageP
                 {step === 1 ? 'Cancel' : 'Back'}
               </Button>
               {step < 3 ? (
-                <Button onClick={() => setStep(step + 1)}>Next</Button>
+                <Button
+                  onClick={() => {
+                    if (step === 1) {
+                      const err = validateStep1();
+                      if (err) {
+                        alert(err);
+                        return;
+                      }
+                    }
+                    setStep(step + 1);
+                  }}
+                >
+                  Next
+                </Button>
               ) : (
                 <Button onClick={handleSubmit} disabled={submitting}>
                   {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Add student'}

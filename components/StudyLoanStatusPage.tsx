@@ -43,6 +43,8 @@ export function StudyLoanStatusPage({ onBack }: { onBack: () => void }) {
           const row = data as StudyLoanApplication & { total_paid?: number; payments_made?: number };
           setApplication({
             ...row,
+            source: row.source === 'manual' ? 'manual' : 'online',
+            extended_form: row.extended_form ?? null,
             total_paid: row.total_paid ?? 0,
             payments_made: row.payments_made ?? 0,
           });
@@ -58,6 +60,7 @@ export function StudyLoanStatusPage({ onBack }: { onBack: () => void }) {
             user_id: mine.userId,
             association: mine.association,
             full_name: mine.fullName,
+            full_name_zh: mine.fullNameZh ?? null,
             age: mine.age,
             email: mine.email || user.email || '',
             university: mine.university,
@@ -75,6 +78,8 @@ export function StudyLoanStatusPage({ onBack }: { onBack: () => void }) {
             loan_type: mine.loanType,
             loan_amount: mine.loanAmount,
             status: mine.status,
+            source: mine.source === 'manual' ? 'manual' : 'online',
+            extended_form: mine.extendedForm ?? null,
             applied_at: mine.appliedDate,
             reviewed_at: null,
             rejection_reason: mine.rejectionReason || null,

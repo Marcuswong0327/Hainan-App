@@ -105,8 +105,9 @@ function buildStudentListTsv(rows: LoanRecipient[], associationLabel: string) {
 /** Stacked bar: paid (green) + remaining (amber) = full loan */
 function LoanStackBar({ loan, paid, className }: { loan: number; paid: number; className?: string }) {
   const rem = Math.max(0, loan - paid);
-  const pctPaid = loan > 0 ? (paid / loan) * 100 : 0;
-  const pctRem = loan > 0 ? (rem / loan) * 100 : 0;
+  // Cap at 100% so overpaid loans don't overflow the bar or show odd labels.
+  const pctPaid = loan > 0 ? Math.min(100, (paid / loan) * 100) : 0;
+  const pctRem = loan > 0 ? Math.min(100 - pctPaid, (rem / loan) * 100) : 0;
   return (
     <div className={className}>
       <div className="h-3 flex rounded-full overflow-hidden bg-gray-200/80 ring-1 ring-gray-200">
@@ -304,7 +305,7 @@ export function LoanRecipientsStatsPage({ recipients, onBack }: LoanRecipientsSt
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex justify-between text-sm text-slate-600">
-                  <span>{Math.round(t.collectionPct)}% collected</span>
+                  <span>{Math.round(Math.min(100, t.collectionPct))}% collected</span>
                   <span>RM {t.paid.toLocaleString()} / RM {t.loan.toLocaleString()}</span>
                 </div>
                 <LoanStackBar loan={t.loan} paid={t.paid} />
@@ -434,7 +435,7 @@ export function LoanRecipientsStatsPage({ recipients, onBack }: LoanRecipientsSt
                         <div key={row.name}>
                           <div className="flex justify-between text-sm mb-1">
                             <span className="font-medium text-slate-800 truncate pr-2">{row.name}</span>
-                            <span className="text-slate-600 shrink-0">{Math.round(row.collectionPct)}%</span>
+                            <span className="text-slate-600 shrink-0">{Math.round(Math.min(100, row.collectionPct))}%</span>
                           </div>
                           <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                             <div

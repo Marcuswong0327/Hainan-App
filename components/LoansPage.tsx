@@ -181,6 +181,7 @@ export function LoansPage({ onBack, onApplied }: { onBack: () => void; onApplied
           loan_type: formData.loanType,
           loan_amount: loanAmount,
           status: 'pending',
+          source: 'online',
         });
         if (error) throw error;
       } else {
@@ -197,6 +198,7 @@ export function LoansPage({ onBack, onApplied }: { onBack: () => void; onApplied
           loanAmount,
           appliedDate: new Date().toISOString(),
           status: 'pending',
+          source: 'online',
         });
         localStorage.setItem('myHainanLoanApplications', JSON.stringify(applications));
       }
