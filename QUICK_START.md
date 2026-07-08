@@ -1,75 +1,62 @@
 # Quick Start Guide
 
-## Step 1: Install Dependencies
+## Project layout
 
-Open a terminal in the project directory and run:
-
-```bash
-npm install
+```
+frontend/   → React + Vite app
+backend/    → Supabase Edge Functions
+database/   → SQL migrations + Supabase CLI config
 ```
 
-This will install all required packages including React, Vite, TypeScript, and UI components.
+## Step 1: Install dependencies
 
-## Step 2: Start the Development Server
+From the repo root:
 
-Run the following command:
+```bash
+npm run install:frontend
+```
+
+## Step 2: Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your Supabase URL and anon key, then restart the dev server if it is already running.
+
+## Step 3: Start the development server
 
 ```bash
 npm run dev
 ```
 
-You should see output like:
+You should see:
+
 ```
-  VITE v5.0.8  ready in 500 ms
+  VITE v5.x  ready in … ms
 
   ➜  Local:   http://localhost:5173/
-  ➜  Network: use --host to expose
 ```
 
-## Step 3: Open in Browser
+## Step 4: Open in browser
 
-Open your web browser and navigate to:
+Go to **http://localhost:5173**
 
-**http://localhost:5173**
+## Docker (optional)
 
-## Step 4: Test the Features
+**Dev** (hot reload): `npm run docker:dev` → http://localhost:5173
 
-1. **Sign Up/Login**: Create an account or login
-2. **View Carousel**: The featured images carousel will auto-swipe every 5 seconds
-3. **Check Header**: 
-   - Click the bell icon for notifications
-   - Use the role switcher if you have multiple roles
-4. **Book an Event**: 
-   - Click "Book Now" on any event card
-   - Complete the booking flow
-5. **Navigate**: Use the quick action cards to access different pages
+**Production**: `npm run docker:build && npm run docker:up` → http://localhost:8080
 
 ## Troubleshooting
 
-### Port Already in Use
-If you see an error about port 5173 being in use, Vite will automatically use the next available port. Check the terminal for the actual URL.
+### Cannot log in on localhost
+Create `.env` from `.env.example` with valid `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, then restart `npm run dev`.
 
-### Module Not Found Errors
-If you see import errors, make sure you've run `npm install` and all dependencies are installed.
+### Port already in use
+Vite picks the next free port; check the terminal for the actual URL.
 
-### TypeScript Errors
-The project uses strict TypeScript. Make sure all files are properly typed.
+### Module not found
+Run `npm run install:frontend` from the repo root.
 
-## What's New
-
-✅ **Auto-Swipe Carousel**: Featured images automatically slide every 5 seconds
-✅ **Integrated Header**: Notification panel and role switcher are now in the header
-✅ **Event Booking**: Click "Book Now" on any event to start the booking process
-✅ **Proper Project Structure**: All files organized and configured for Vite
-
-## Next Steps
-
-- Explore the different user roles (Super Admin, Sub Admin, Sub Editor, Public)
-- Create and approve events
-- Make bookings and check them in "My Pass"
-- Test the notification system
-- Try role switching (if you have multiple roles)
-
-
-
-
+See `README.md` and `docs/SUPABASE_SETUP.md` for database migrations and Edge Function deploy.

@@ -1,3 +1,16 @@
 node_modules
 .env
 .env.local
+dist
+.vite
+frontend/dist
+frontend/node_modules
+frontend/.vite
+backup/
+*.log
+
+# Legacy root artifacts (pre-monorepo)
+/.vite/
+/dist/
+/supabase/
+/public/
