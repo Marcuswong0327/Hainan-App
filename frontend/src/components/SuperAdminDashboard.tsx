@@ -3112,7 +3112,7 @@ export function SuperAdminDashboard() {
 
       {/* Schedule notifications for loan recipients */}
       <Dialog open={showNotificationDialog} onOpenChange={setShowNotificationDialog}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto bg-white text-gray-900 border-gray-300">
+        <DialogContent className="w-[min(96vw,56rem)] max-w-4xl sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-white text-gray-900 border-gray-300">
           <DialogHeader>
             <DialogTitle className="text-gray-900">Send notifications to recipients</DialogTitle>
             <DialogDescription className="text-gray-600">
@@ -3120,24 +3120,30 @@ export function SuperAdminDashboard() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label className="text-gray-900">Students</Label>
-                <div className="flex flex-wrap gap-2">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-4 border-b border-gray-200 pb-3">
+                <Label className="text-gray-900 shrink-0">Students</Label>
+                <div className="flex flex-wrap items-center gap-4">
                   <Button
                     type="button"
-                    size="sm"
-                    variant={notificationListFilter === 'unpaid' ? 'default' : 'outline'}
-                    className={notificationListFilter === 'unpaid' ? '' : 'bg-white'}
+                    variant="ghost"
+                    className={`h-auto rounded-full px-5 py-2 text-sm font-medium transition-all ${
+                      notificationListFilter === 'unpaid'
+                        ? 'border-2 border-black bg-white text-black shadow-none hover:bg-white'
+                        : 'border-0 bg-transparent text-black shadow-none hover:bg-transparent hover:text-gray-500'
+                    }`}
                     onClick={() => setNotificationListFilter('unpaid')}
                   >
                     Unpaid only
                   </Button>
                   <Button
                     type="button"
-                    size="sm"
-                    variant={notificationListFilter === 'all' ? 'default' : 'outline'}
-                    className={notificationListFilter === 'all' ? '' : 'bg-white'}
+                    variant="ghost"
+                    className={`h-auto rounded-full px-5 py-2 text-sm font-medium transition-all ${
+                      notificationListFilter === 'all'
+                        ? 'border-2 border-black bg-white text-black shadow-none hover:bg-white'
+                        : 'border-0 bg-transparent text-black shadow-none hover:bg-transparent hover:text-gray-500'
+                    }`}
                     onClick={() => setNotificationListFilter('all')}
                   >
                     All
@@ -3158,13 +3164,12 @@ export function SuperAdminDashboard() {
 
                 return (
                   <>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-4">
                       <Button
                         type="button"
-                        size="sm"
-                        variant="outline"
-                        className="bg-white"
+                        variant="ghost"
                         disabled={visibleIds.length === 0}
+                        className="h-auto rounded-full px-5 py-2 text-sm font-medium border-2 border-black bg-white text-black shadow-none hover:bg-gray-50 disabled:opacity-40"
                         onClick={() => {
                           if (allVisibleSelected) {
                             setNotificationSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
@@ -3175,11 +3180,11 @@ export function SuperAdminDashboard() {
                       >
                         {allVisibleSelected ? 'Clear visible' : 'Select visible'}
                       </Button>
-                      <span className="text-xs text-gray-500 self-center">
-                        {notificationSelectedIds.length} selected
+                      <span className="text-xs text-gray-500">
+                        {notificationSelectedIds.length} selected · {visible.length} shown
                       </span>
                     </div>
-                    <div className="max-h-56 overflow-y-auto rounded-md border border-gray-200 divide-y bg-white">
+                    <div className="max-h-[min(50vh,28rem)] overflow-y-auto rounded-md border border-gray-200 bg-white">
                       {visible.length === 0 ? (
                         <p className="p-4 text-sm text-gray-500">
                           {loanRecipients.length === 0
@@ -3187,44 +3192,58 @@ export function SuperAdminDashboard() {
                             : 'No unpaid recipients. Switch to All to see everyone.'}
                         </p>
                       ) : (
-                        visible.map(({ r, remaining }) => {
-                          const checked = notificationSelectedIds.includes(r.id);
-                          return (
-                            <label
-                              key={r.id}
-                              className="flex items-start gap-3 p-3 cursor-pointer hover:bg-gray-50"
-                            >
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(v) => {
-                                  setNotificationSelectedIds((prev) =>
-                                    v ? [...prev, r.id] : prev.filter((id) => id !== r.id),
-                                  );
-                                }}
-                                className="mt-0.5"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-sm font-medium text-gray-900 truncate">
-                                    {r.full_name_en}
-                                  </span>
-                                  {r.full_name_zh?.trim() ? (
-                                    <span className="text-xs text-gray-500">{r.full_name_zh.trim()}</span>
-                                  ) : null}
-                                  <Badge
-                                    variant="secondary"
-                                    className={remaining > 0 ? 'bg-amber-600' : 'bg-green-600'}
-                                  >
-                                    {remaining > 0 ? 'unpaid' : 'paid'}
-                                  </Badge>
-                                </div>
-                                <p className="text-xs text-gray-500 truncate">
-                                  {r.university} · Remaining RM {remaining.toLocaleString()}
-                                </p>
-                              </div>
-                            </label>
-                          );
-                        })
+                        <>
+                          <div className="sticky top-0 z-[1] hidden sm:grid grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1.6fr)_7rem_5.5rem] gap-3 px-3 py-2 text-xs font-medium text-gray-500 bg-gray-50 border-b border-gray-200">
+                            <span className="w-4" />
+                            <span>Name</span>
+                            <span>University</span>
+                            <span className="text-right">Remaining</span>
+                            <span className="text-right">Status</span>
+                          </div>
+                          <div className="divide-y">
+                            {visible.map(({ r, remaining }) => {
+                              const checked = notificationSelectedIds.includes(r.id);
+                              return (
+                                <label
+                                  key={r.id}
+                                  className="flex sm:grid sm:grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1.6fr)_7rem_5.5rem] items-start sm:items-center gap-3 p-3 cursor-pointer hover:bg-gray-50"
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={(v) => {
+                                      setNotificationSelectedIds((prev) =>
+                                        v ? [...prev, r.id] : prev.filter((id) => id !== r.id),
+                                      );
+                                    }}
+                                    className="mt-0.5 sm:mt-0"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">{r.full_name_en}</p>
+                                    {r.full_name_zh?.trim() ? (
+                                      <p className="text-xs text-gray-500 truncate">{r.full_name_zh.trim()}</p>
+                                    ) : null}
+                                  </div>
+                                  <p className="min-w-0 text-sm text-gray-600 truncate sm:block">
+                                    <span className="sm:hidden text-xs text-gray-400">University: </span>
+                                    {r.university || '—'}
+                                  </p>
+                                  <p className="text-sm font-medium text-gray-900 sm:text-right whitespace-nowrap">
+                                    <span className="sm:hidden text-xs text-gray-400 font-normal">Remaining: </span>
+                                    RM {remaining.toLocaleString()}
+                                  </p>
+                                  <div className="sm:justify-self-end">
+                                    <Badge
+                                      variant="secondary"
+                                      className={remaining > 0 ? 'bg-amber-600' : 'bg-green-600'}
+                                    >
+                                      {remaining > 0 ? 'unpaid' : 'paid'}
+                                    </Badge>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </>
                       )}
                     </div>
                   </>
