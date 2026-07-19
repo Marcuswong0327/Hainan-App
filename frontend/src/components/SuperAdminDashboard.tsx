@@ -9,6 +9,7 @@ import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Checkbox } from '../ui/checkbox';
 import { CheckCircle, XCircle, FileText, Building2, Download, HeartHandshake, Eye, FileDown, CreditCard, ExternalLink, UserPlus, DollarSign, Trash2, Loader2, Users, GraduationCap, Pencil } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -235,7 +236,8 @@ export function SuperAdminDashboard() {
   const [editStudentIcFile, setEditStudentIcFile] = useState<File | null>(null);
   const [editDocScreenshotFile, setEditDocScreenshotFile] = useState<File | null>(null);
   const [showNotificationDialog, setShowNotificationDialog] = useState(false);
-  const [notificationTarget, setNotificationTarget] = useState<'all' | 'active' | 'completed'>('active');
+  const [notificationSelectedIds, setNotificationSelectedIds] = useState<string[]>([]);
+  const [notificationListFilter, setNotificationListFilter] = useState<'unpaid' | 'all'>('unpaid');
   const [notificationMessage, setNotificationMessage] = useState(
     'Your study loan repayment is due soon. Please check your loan status in the app.'
   );
@@ -1638,7 +1640,15 @@ export function SuperAdminDashboard() {
                     <div className="flex flex-wrap justify-end gap-2">
                       <Button
                         variant="outline"
-                        onClick={() => { setActiveTab('recipients'); setShowNotificationDialog(true); }}
+                        onClick={() => {
+                          setActiveTab('recipients');
+                          const unpaidIds = loanRecipients
+                            .filter((r) => Math.max(0, r.loan_amount - r.total_paid) > 0)
+                            .map((r) => r.id);
+                          setNotificationSelectedIds(unpaidIds);
+                          setNotificationListFilter('unpaid');
+                          setShowNotificationDialog(true);
+                        }}
                         className="bg-white border border-black text-black hover:bg-gray-50 rounded-md shadow-none"
                       >
                         Send notifications
@@ -3102,57 +3112,164 @@ export function SuperAdminDashboard() {
 
       {/* Schedule notifications for loan recipients */}
       <Dialog open={showNotificationDialog} onOpenChange={setShowNotificationDialog}>
-        <DialogContent className="max-w-lg bg-white text-gray-900">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto bg-white text-gray-900 border-gray-300">
           <DialogHeader>
-            <DialogTitle>Send notifications to recipients</DialogTitle>
-            <DialogDescription>
-              Choose who to notify, customise the message, and when it should be sent.
+            <DialogTitle className="text-gray-900">Send notifications to recipients</DialogTitle>
+            <DialogDescription className="text-gray-600">
+              Select students from the loan recipients list, customise the message, and choose when to send.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Who to send to</Label>
-              <Select
-                value={notificationTarget}
-                onValueChange={(v) => setNotificationTarget(v as 'all' | 'active' | 'completed')}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select recipients" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All loan recipients</SelectItem>
-                  <SelectItem value="active">Only active (not fully paid)</SelectItem>
-                  <SelectItem value="completed">Only completed loans</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-gray-900">Students</Label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={notificationListFilter === 'unpaid' ? 'default' : 'outline'}
+                    className={notificationListFilter === 'unpaid' ? '' : 'bg-white'}
+                    onClick={() => setNotificationListFilter('unpaid')}
+                  >
+                    Unpaid only
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={notificationListFilter === 'all' ? 'default' : 'outline'}
+                    className={notificationListFilter === 'all' ? '' : 'bg-white'}
+                    onClick={() => setNotificationListFilter('all')}
+                  >
+                    All
+                  </Button>
+                </div>
+              </div>
+              {(() => {
+                const visible = loanRecipients
+                  .map((r) => {
+                    const remaining = Math.max(0, r.loan_amount - r.total_paid);
+                    return { r, remaining };
+                  })
+                  .filter(({ remaining }) => notificationListFilter === 'all' || remaining > 0)
+                  .sort((a, b) => b.remaining - a.remaining);
+                const visibleIds = visible.map(({ r }) => r.id);
+                const allVisibleSelected =
+                  visibleIds.length > 0 && visibleIds.every((id) => notificationSelectedIds.includes(id));
+
+                return (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="bg-white"
+                        disabled={visibleIds.length === 0}
+                        onClick={() => {
+                          if (allVisibleSelected) {
+                            setNotificationSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+                          } else {
+                            setNotificationSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+                          }
+                        }}
+                      >
+                        {allVisibleSelected ? 'Clear visible' : 'Select visible'}
+                      </Button>
+                      <span className="text-xs text-gray-500 self-center">
+                        {notificationSelectedIds.length} selected
+                      </span>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto rounded-md border border-gray-200 divide-y bg-white">
+                      {visible.length === 0 ? (
+                        <p className="p-4 text-sm text-gray-500">
+                          {loanRecipients.length === 0
+                            ? 'No loan recipients in the database yet.'
+                            : 'No unpaid recipients. Switch to All to see everyone.'}
+                        </p>
+                      ) : (
+                        visible.map(({ r, remaining }) => {
+                          const checked = notificationSelectedIds.includes(r.id);
+                          return (
+                            <label
+                              key={r.id}
+                              className="flex items-start gap-3 p-3 cursor-pointer hover:bg-gray-50"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(v) => {
+                                  setNotificationSelectedIds((prev) =>
+                                    v ? [...prev, r.id] : prev.filter((id) => id !== r.id),
+                                  );
+                                }}
+                                className="mt-0.5"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-medium text-gray-900 truncate">
+                                    {r.full_name_en}
+                                  </span>
+                                  {r.full_name_zh?.trim() ? (
+                                    <span className="text-xs text-gray-500">{r.full_name_zh.trim()}</span>
+                                  ) : null}
+                                  <Badge
+                                    variant="secondary"
+                                    className={remaining > 0 ? 'bg-amber-600' : 'bg-green-600'}
+                                  >
+                                    {remaining > 0 ? 'unpaid' : 'paid'}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-gray-500 truncate">
+                                  {r.university} · Remaining RM {remaining.toLocaleString()}
+                                </p>
+                              </div>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
             <div className="space-y-2">
-              <Label>When to send</Label>
+              <Label className="text-gray-900">When to send</Label>
               <Input
                 type="datetime-local"
                 value={notificationSchedule}
                 onChange={(e) => setNotificationSchedule(e.target.value)}
+                className="bg-white text-gray-900 border-gray-300"
               />
               <p className="text-xs text-gray-500">
                 Date and time when notifications should be sent.
               </p>
             </div>
             <div className="space-y-2">
-              <Label>Message template</Label>
+              <Label className="text-gray-900">Message</Label>
               <Textarea
                 rows={4}
                 value={notificationMessage}
                 onChange={(e) => setNotificationMessage(e.target.value)}
+                className="bg-white text-gray-900 border-gray-300"
+                placeholder="Write a specialised message for the selected students…"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNotificationDialog(false)}>Cancel</Button>
+            <Button variant="outline" className="bg-white" onClick={() => setShowNotificationDialog(false)}>Cancel</Button>
             <Button
               variant="outline"
-              disabled={sendingNotificationNow}
+              className="bg-white"
+              disabled={sendingNotificationNow || notificationSelectedIds.length === 0}
               onClick={async () => {
                 if (sendingNotificationNow) return;
+                if (notificationSelectedIds.length === 0) {
+                  alert('Select at least one student.');
+                  return;
+                }
+                if (!notificationMessage.trim()) {
+                  alert('Enter a message.');
+                  return;
+                }
                 const now = Date.now();
                 // Extra guard: prevent accidental double-click spamming
                 if (now - lastSendNowAt < 8000) {
@@ -3172,8 +3289,9 @@ export function SuperAdminDashboard() {
 
                   const { error } = await supabase.from('scheduled_notifications').insert({
                     id,
-                    target: notificationTarget,
-                    message: notificationMessage,
+                    target: 'selected',
+                    recipient_ids: notificationSelectedIds,
+                    message: notificationMessage.trim(),
                     schedule_at: scheduleAt,
                     created_at: new Date().toISOString(),
                   });
@@ -3203,7 +3321,7 @@ export function SuperAdminDashboard() {
                     return;
                   }
 
-                  alert(`Sent now. Processed: ${json?.processed ?? 0}`);
+                  alert(`Sent now to ${notificationSelectedIds.length} student(s). Processed: ${json?.processed ?? 0}`);
                   setShowNotificationDialog(false);
                 } catch (e: any) {
                   alert(e?.message || 'Failed to send now');
@@ -3215,9 +3333,17 @@ export function SuperAdminDashboard() {
               {sendingNotificationNow ? 'Sending…' : 'Send now'}
             </Button>
             <Button
-              disabled={savingNotificationSchedule || sendingNotificationNow}
+              disabled={savingNotificationSchedule || sendingNotificationNow || notificationSelectedIds.length === 0}
               onClick={async () => {
                 if (savingNotificationSchedule) return;
+                if (notificationSelectedIds.length === 0) {
+                  alert('Select at least one student.');
+                  return;
+                }
+                if (!notificationMessage.trim()) {
+                  alert('Enter a message.');
+                  return;
+                }
                 setSavingNotificationSchedule(true);
                 // datetime-local returns local time without timezone. Convert to UTC ISO for timestamptz.
                 const scheduleAt = notificationSchedule
@@ -3227,8 +3353,9 @@ export function SuperAdminDashboard() {
                   if (isSupabaseConfigured() && supabase) {
                     const { error } = await supabase.from('scheduled_notifications').insert({
                       id: `loan_${Date.now()}`,
-                      target: notificationTarget,
-                      message: notificationMessage,
+                      target: 'selected',
+                      recipient_ids: notificationSelectedIds,
+                      message: notificationMessage.trim(),
                       schedule_at: scheduleAt,
                       created_at: new Date().toISOString(),
                     });
@@ -3240,14 +3367,15 @@ export function SuperAdminDashboard() {
                     const list = JSON.parse(localStorage.getItem('myHainanScheduledNotifications') || '[]');
                     list.push({
                       id: `loan_${Date.now()}`,
-                      target: notificationTarget,
-                      message: notificationMessage,
+                      target: 'selected',
+                      recipient_ids: notificationSelectedIds,
+                      message: notificationMessage.trim(),
                       schedule_at: scheduleAt,
                       created_at: new Date().toISOString(),
                     });
                     localStorage.setItem('myHainanScheduledNotifications', JSON.stringify(list));
                   }
-                  alert('Notification schedule saved.');
+                  alert(`Notification schedule saved for ${notificationSelectedIds.length} student(s).`);
                   setShowNotificationDialog(false);
                 } catch (e: any) {
                   alert(e?.message || 'Failed to save notification schedule');

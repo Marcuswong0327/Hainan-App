@@ -40,7 +40,8 @@ function ensureFirebaseApp() {
 
 type ScheduledNotification = {
   id: string;
-  target: "all" | "active" | "completed";
+  target: "all" | "active" | "completed" | "selected";
+  recipient_ids?: string[] | null;
   message: string;
   schedule_at: string;
   created_at: string;
@@ -103,11 +104,18 @@ async function getDueNotifications(supabase: ReturnType<typeof createClient>) {
 
 async function getLoanRecipientsForTarget(
   supabase: ReturnType<typeof createClient>,
-  target: ScheduledNotification["target"]
+  notification: ScheduledNotification
 ) {
   let query = supabase.from("study_loan_recipients").select("id, email, status");
-  if (target === "active") query = query.eq("status", "active");
-  else if (target === "completed") query = query.eq("status", "completed");
+  const ids = (notification.recipient_ids ?? []).filter(Boolean);
+  if (notification.target === "selected" || ids.length > 0) {
+    if (ids.length === 0) return [] as LoanRecipient[];
+    query = query.in("id", ids);
+  } else if (notification.target === "active") {
+    query = query.eq("status", "active");
+  } else if (notification.target === "completed") {
+    query = query.eq("status", "completed");
+  }
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as LoanRecipient[];
@@ -136,7 +144,7 @@ async function processOneNotification(
   supabase: ReturnType<typeof createClient>,
   notification: ScheduledNotification
 ) {
-  const recipients = await getLoanRecipientsForTarget(supabase, notification.target);
+  const recipients = await getLoanRecipientsForTarget(supabase, notification);
   const allTokens: string[] = [];
   const userIdsToNotify = new Set<string>();
   const errors: string[] = [];
