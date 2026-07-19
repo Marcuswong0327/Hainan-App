@@ -2051,36 +2051,39 @@ export function SuperAdminDashboard() {
 
       {/* Reject Event Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent>
+        <DialogContent className="bg-white text-gray-900 border-gray-300">
           <DialogHeader>
-            <DialogTitle>Reject Event</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-gray-900">Reject Event</DialogTitle>
+            <DialogDescription className="text-gray-600">
               Please provide a reason for rejecting this event. The Sub Editor will see this reason in their dashboard.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="rejection-reason">Rejection Reason *</Label>
+              <Label htmlFor="rejection-reason" className="text-gray-900">Rejection Reason *</Label>
               <Textarea
                 id="rejection-reason"
                 placeholder="Enter the reason for rejection..."
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 rows={4}
-                className="bg-white border-gray-300"
+                className="bg-white text-gray-900 border-gray-300 placeholder:text-gray-500"
                 required
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => {
+            <Button
+              variant="outline"
+              className="bg-white text-gray-900 border-gray-300"
+              onClick={() => {
               setShowRejectDialog(false);
               setRejectionReason('');
               setSelectedEventForReject(null);
             }}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={submitRejection}>
+            <Button variant="destructive" className="bg-red-600 hover:bg-red-700 text-white" onClick={submitRejection}>
               Reject Event
             </Button>
           </DialogFooter>
@@ -2238,36 +2241,42 @@ export function SuperAdminDashboard() {
 
       {/* Reject Welfare Application Dialog */}
       <Dialog open={showRejectWelfareDialog} onOpenChange={setShowRejectWelfareDialog}>
-        <DialogContent>
+        <DialogContent className="bg-white text-gray-900 border-gray-300">
           <DialogHeader>
-            <DialogTitle>Reject Welfare Application</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-gray-900">Reject Welfare Application</DialogTitle>
+            <DialogDescription className="text-gray-600">
               Please provide a reason for rejecting this welfare application. The applicant will see this reason.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="welfare-rejection-reason">Rejection Reason *</Label>
+              <Label htmlFor="welfare-rejection-reason" className="text-gray-900">Rejection Reason *</Label>
               <Textarea
                 id="welfare-rejection-reason"
                 placeholder="Enter the reason for rejection..."
                 value={welfareRejectionReason}
                 onChange={(e) => setWelfareRejectionReason(e.target.value)}
                 rows={4}
-                className="bg-white border-gray-300"
+                className="bg-white text-gray-900 border-gray-300 placeholder:text-gray-500"
                 required
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => {
+            <Button
+              variant="outline"
+              className="bg-white text-gray-900 border-gray-300"
+              onClick={() => {
               setShowRejectWelfareDialog(false);
               setWelfareRejectionReason('');
               setSelectedWelfareApp(null);
             }}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => {
+            <Button
+              variant="destructive"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => {
               if (!welfareRejectionReason.trim()) {
                 alert('Please provide a rejection reason');
                 return;
@@ -2524,36 +2533,42 @@ export function SuperAdminDashboard() {
 
       {/* Reject Study Loan Dialog */}
       <Dialog open={showRejectStudyLoanDialog} onOpenChange={setShowRejectStudyLoanDialog}>
-        <DialogContent>
+        <DialogContent className="bg-white text-gray-900 border-gray-300">
           <DialogHeader>
-            <DialogTitle>Reject Study Loan Application</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-gray-900">Reject Study Loan Application</DialogTitle>
+            <DialogDescription className="text-gray-600">
               Please provide a reason for rejection. The applicant will see this reason on their status page.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="study-loan-rejection-reason">Rejection Reason *</Label>
+              <Label htmlFor="study-loan-rejection-reason" className="text-gray-900">Rejection Reason *</Label>
               <Textarea
                 id="study-loan-rejection-reason"
                 placeholder="Enter the reason for rejection..."
                 value={studyLoanRejectionReason}
                 onChange={(e) => setStudyLoanRejectionReason(e.target.value)}
                 rows={4}
-                className="bg-white border-gray-300"
+                className="bg-white text-gray-900 border-gray-300 placeholder:text-gray-500"
                 required
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => {
+            <Button
+              variant="outline"
+              className="bg-white text-gray-900 border-gray-300"
+              onClick={() => {
               setShowRejectStudyLoanDialog(false);
               setStudyLoanRejectionReason('');
               setSelectedStudyLoan(null);
             }}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => {
+            <Button
+              variant="destructive"
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => {
               if (!studyLoanRejectionReason.trim()) {
                 alert('Please provide a rejection reason');
                 return;
