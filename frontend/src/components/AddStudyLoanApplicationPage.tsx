@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -118,7 +118,7 @@ function getEditorBootstrap(initialApplication?: StudyLoanApplication) {
       created_at: initialApplication.created_at,
       status: initialApplication.status,
     },
-    step: 2,
+    step: 1,
     loanType: hydrated.loanType,
     paper: hydrated.paper,
     association: hydrated.association,
@@ -192,6 +192,10 @@ export function AddStudyLoanApplicationPage({ onBack, onSaved, initialApplicatio
   const totalSteps = sections.length;
   const formMeta = loanType ? STUDY_LOAN_FORM_META[loanType] : null;
 
+  useEffect(() => {
+    if (step > totalSteps) setStep(totalSteps);
+  }, [step, totalSteps]);
+
   const stepTitle = useMemo(() => {
     if (currentSection === 'applicant' && loanType === 'master') {
       return '(A) Applicant & master details 申请人及硕士学业概况';
@@ -236,13 +240,23 @@ export function AddStudyLoanApplicationPage({ onBack, onSaved, initialApplicatio
   };
 
   const handleLoanTypeChange = (value: StudyLoanFormVariant) => {
-    if (isEditMode) return;
-    if (loanType && value !== loanType && step > 1) {
-      const ok = window.confirm('Changing loan type will clear the form. Continue?');
-      if (!ok) return;
-      resetApplicantFields();
-      setStep(1);
+    if (!value || value === loanType) return;
+
+    if (loanType) {
+      if (isEditMode) {
+        const ok = window.confirm(
+          'Change loan type?\n\nForm steps will update to match the new type. Applicant name, association, phone, and other shared details are kept. Review each step before saving.',
+        );
+        if (!ok) return;
+        setStep(1);
+      } else if (step > 1) {
+        const ok = window.confirm('Changing loan type will clear the form. Continue?');
+        if (!ok) return;
+        resetApplicantFields();
+        setStep(1);
+      }
     }
+
     setLoanType(value);
   };
 
@@ -1184,7 +1198,7 @@ export function AddStudyLoanApplicationPage({ onBack, onSaved, initialApplicatio
           <>
             <p className="text-sm text-gray-600">
               {isEditMode
-                ? 'Loan type cannot be changed when editing an existing application.'
+                ? 'You can change the loan type here if it was selected wrongly. Form steps will update to match the new category.'
                 : 'Select the loan type first. The application form will match the official paper form for that category.'}
             </p>
             <div className="space-y-2">
@@ -1192,7 +1206,6 @@ export function AddStudyLoanApplicationPage({ onBack, onSaved, initialApplicatio
               <Select
                 value={loanType || undefined}
                 onValueChange={(v) => handleLoanTypeChange(v as StudyLoanFormVariant)}
-                disabled={isEditMode}
               >
                 <SelectTrigger><SelectValue placeholder="Select loan type" /></SelectTrigger>
                 <SelectContent>
@@ -1315,6 +1328,42 @@ export function AddStudyLoanApplicationPage({ onBack, onSaved, initialApplicatio
             </>
           )}
         </div>
+
+        {isEditMode && (
+          <Card className="mb-6 border-amber-200 bg-amber-50/40">
+            <CardContent className="p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Change loan type</p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Use this if the wrong loan category was selected. Annual amount and form steps update when you change it.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Loan type *</Label>
+                <Select
+                  value={loanType || undefined}
+                  onValueChange={(v) => handleLoanTypeChange(v as StudyLoanFormVariant)}
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Select loan type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOAN_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label} — RM {t.amount.toLocaleString()} / year
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {loanType && formMeta && (
+                <p className="text-xs text-gray-600">
+                  Current form: {formMeta.formCode} · RM {formMeta.annualAmount.toLocaleString()} / year
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
